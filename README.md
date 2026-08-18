@@ -98,7 +98,37 @@ Errors: `403 forbidden` (wrong token), `409 not_editable` (it is a `doc`),
 
 ### `GET /health`
 
-`{ "ok": true }` — Railway's health check target.
+Needs no key, and always answers 200 so it can explain itself:
+
+```jsonc
+{ "ok": true, "missingEnv": [], "db": { "status": "connected", "readyState": 1 },
+  "uptimeSeconds": 412 }
+```
+
+`ok` is false when a required variable is missing or the database is not
+connected, with `missingEnv` and `db.error` saying which. Curl this first
+whenever the service misbehaves — a platform-level "application failed to
+respond" means the container is not running at all, which this endpoint
+existing at all is meant to rule out.
+
+## Troubleshooting
+
+**"Application failed to respond" / a 502 with a `request_id`** — that error page
+comes from Railway, not from this service (its errors are always JSON like
+`{"error": "..."}`). It means nothing is listening. Check the deploy logs: the
+service binds the port before it touches the database, so if it is not listening
+the process failed even earlier — usually a build or start-command problem.
+
+**`{"error":"database_unavailable"}`** — the service is up but Atlas is not
+reachable. `GET /health` carries the driver's own message in `db.error`. In
+order of likelihood: Atlas Network Access does not allow Railway's egress
+(allow `0.0.0.0/0` to confirm, then narrow), the database user's password is
+wrong or contains unescaped URL characters, or `MONGODB_URI` is missing the
+database name. The service retries with backoff and recovers on its own once
+the cause is fixed — no redeploy needed.
+
+**`{"error":"unauthorized"}`** — `API_KEY` here and `SHORTENER_API_KEY` on the
+Setu site are not the same value.
 
 ## Running locally
 

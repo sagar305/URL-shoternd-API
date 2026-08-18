@@ -5,6 +5,16 @@ import { createFakeLinkModel } from "./fakeLinkModel.js";
 const fake = createFakeLinkModel();
 vi.mock("../src/models/Link.js", () => ({ get Link() { return fake; } }));
 
+// The tests drive a fake model rather than a real connection, so the readiness
+// gate is mocked too. `dbReady` lets one test drive it the other way.
+const dbReady = { value: true };
+vi.mock("../src/db.js", () => ({
+  isDbReady: () => dbReady.value,
+  dbState: () => ({ status: dbReady.value ? "connected" : "error", readyState: 0 }),
+  connectDb: async () => {},
+  disconnectDb: async () => {},
+}));
+
 const { createApp } = await import("../src/app.js");
 const { config } = await import("../src/config.js");
 
@@ -13,11 +23,38 @@ const auth = (req) => req.set("x-api-key", config.apiKey);
 
 beforeEach(() => {
   fake.rows.length = 0;
+  dbReady.value = true;
 });
 
 describe("health", () => {
-  it("needs no key", async () => {
-    await request(app).get("/health").expect(200, { ok: true });
+  it("needs no key and reports what is wrong", async () => {
+    const response = await request(app).get("/health").expect(200);
+    expect(response.body.ok).toBe(true);
+    expect(response.body.missingEnv).toEqual([]);
+    expect(response.body.db.status).toBe("connected");
+  });
+
+  it("still answers 200 when the database is down, rather than going silent", async () => {
+    // A health check that fails with the database leaves the platform showing
+    // an unexplained gateway error, which is the thing this endpoint exists to
+    // prevent.
+    dbReady.value = false;
+    const response = await request(app).get("/health").expect(200);
+    expect(response.body.ok).toBe(false);
+    expect(response.body.db.status).toBe("error");
+  });
+});
+
+describe("when the database is unreachable", () => {
+  it("answers 503 with a reason instead of hanging on a buffered query", async () => {
+    dbReady.value = false;
+    const response = await auth(request(app).post("/api/links")).send({
+      payload: "x",
+      kind: "doc",
+    });
+
+    expect(response.status).toBe(503);
+    expect(response.body.error).toBe("database_unavailable");
   });
 });
 

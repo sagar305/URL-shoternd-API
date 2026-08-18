@@ -6,7 +6,8 @@ import helmet from "helmet";
 import cors from "cors";
 import compression from "compression";
 import rateLimit from "express-rate-limit";
-import { config } from "./config.js";
+import { config, missingConfig } from "./config.js";
+import { dbState, isDbReady } from "./db.js";
 import { requireApiKey, checkOrigin } from "./middleware/auth.js";
 import { errorHandler, notFound } from "./middleware/errors.js";
 import { linksRouter } from "./routes/links.js";
@@ -33,7 +34,18 @@ export function createApp() {
   // route with a clear error rather than by the parser with a vague one.
   app.use(express.json({ limit: config.maxPayloadBytes + 16 * 1024 }));
 
-  app.get("/health", (_req, res) => res.json({ ok: true }));
+  // Always 200, and always says why it is unhappy. A health endpoint that
+  // fails when the database does gives the platform nothing to display but a
+  // gateway error, which is exactly the situation this is meant to explain.
+  app.get("/health", (_req, res) => {
+    const missing = missingConfig();
+    res.json({
+      ok: missing.length === 0 && isDbReady(),
+      missingEnv: missing,
+      db: dbState(),
+      uptimeSeconds: Math.round(process.uptime()),
+    });
+  });
 
   app.use(
     "/api/links",
@@ -45,6 +57,12 @@ export function createApp() {
     }),
     checkOrigin,
     requireApiKey,
+    // Without a database there is nothing this router can do, and Mongoose
+    // buffering would otherwise turn it into a slow, unexplained timeout.
+    (_req, res, next) =>
+      isDbReady()
+        ? next()
+        : res.status(503).json({ error: "database_unavailable", db: dbState() }),
     linksRouter
   );
 

@@ -1,13 +1,13 @@
-// Environment configuration, read once at startup so a missing value fails
-// loudly here rather than on the first request that happens to need it.
+// Environment configuration.
+//
+// Nothing here throws. A misconfigured service that refuses to start is
+// invisible from outside — the platform just reports a 502 with no reason —
+// so missing values are collected instead and reported on /health, and the
+// HTTP server starts either way.
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function required(name) {
-  const value = process.env[name];
-  if (!value) throw new Error(`Missing required environment variable: ${name}`);
-  return value;
-}
+const isTest = process.env.NODE_ENV === "test";
 
 function list(name) {
   return (process.env[name] ?? "")
@@ -18,12 +18,12 @@ function list(name) {
 
 export const config = {
   port: Number(process.env.PORT ?? 8080),
-  mongoUri: process.env.NODE_ENV === "test" ? "" : required("MONGODB_URI"),
+  mongoUri: process.env.MONGODB_URI ?? "",
 
   // The shared secret the Setu site's server-side proxy sends as x-api-key.
   // Every endpoint requires it: nothing here is meant to be reachable from a
   // browser directly, which is what keeps this from being an open shortener.
-  apiKey: process.env.NODE_ENV === "test" ? "test-key" : required("API_KEY"),
+  apiKey: process.env.API_KEY ?? (isTest ? "test-key" : ""),
 
   // Checked only when a request actually carries an Origin header (i.e. it came
   // from a browser). Defence in depth behind the API key, never instead of it —
@@ -39,5 +39,14 @@ export const config = {
   // Where a code turns back into a page. Used to build the returned short URL.
   shortUrlBase: (process.env.SHORT_URL_BASE ?? "https://setutechnology.com/view").replace(/\/+$/, ""),
 };
+
+/** Names of required variables that are missing. Empty means fully configured. */
+export function missingConfig() {
+  if (isTest) return [];
+  const missing = [];
+  if (!config.mongoUri) missing.push("MONGODB_URI");
+  if (!config.apiKey) missing.push("API_KEY");
+  return missing;
+}
 
 export { DAY_MS };
