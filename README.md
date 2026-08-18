@@ -113,6 +113,14 @@ existing at all is meant to rule out.
 
 ## Troubleshooting
 
+**`"error": "connection refused"` in Railway's request log** — the container is
+running but nothing is listening on the port the edge routes to. Almost always a
+`PORT` mismatch: Railway injects `PORT` to match its target port, so setting
+`PORT` yourself as a service variable pins the app somewhere the edge is not
+sending traffic. **Delete any `PORT` variable from the Railway service** and
+redeploy. The boot log names the port and where it came from, so compare it with
+Settings → Networking → target port.
+
 **"Application failed to respond" / a 502 with a `request_id`** — that error page
 comes from Railway, not from this service (its errors are always JSON like
 `{"error": "..."}`). It means nothing is listening. Check the deploy logs: the
@@ -159,7 +167,9 @@ command and the health check. Set these service variables:
 | `LINK_TTL_DAYS` | Defaults to 180 |
 | `MAX_PAYLOAD_BYTES` | Defaults to 262144 (256 KB) |
 
-`PORT` is injected by Railway — do not set it there.
+**Do not set `PORT`.** Railway injects it to match the port its edge routes to;
+setting it yourself is the most common cause of "connection refused" on an
+otherwise healthy container.
 
 Then set `SHORTENER_API_URL` and `SHORTENER_API_KEY` on the Setu site to point
 at the deployed service.

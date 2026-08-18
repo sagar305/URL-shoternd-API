@@ -16,10 +16,28 @@ function main() {
     console.error("[shortener] the service will start but every request will fail until they are set.");
   }
 
+  // Where the port came from, said out loud. A platform injects PORT to match
+  // what its edge routes to; a hand-set PORT that disagrees with it produces
+  // "connection refused" on every request while the container looks perfectly
+  // healthy, and nothing in the logs would otherwise explain it.
+  if (process.env.PORT) {
+    console.log(`[shortener] PORT=${process.env.PORT} (from the environment)`);
+  } else {
+    console.warn(
+      `[shortener] PORT is not set; falling back to ${config.port}. On Railway this ` +
+        "should be injected — if requests fail with connection refused, the edge is " +
+        "routing to a different port."
+    );
+  }
+
   // 0.0.0.0 explicitly: container platforms route to the published port and a
   // loopback-only bind would be unreachable from outside.
   const server = createApp().listen(config.port, "0.0.0.0", () => {
-    console.log(`[shortener] listening on 0.0.0.0:${config.port}`);
+    const address = server.address();
+    console.log(
+      `[shortener] listening on 0.0.0.0:${config.port}` +
+        (address && typeof address === "object" ? ` (bound ${address.address}:${address.port})` : "")
+    );
   });
 
   server.on("error", (error) => {
