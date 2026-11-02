@@ -161,6 +161,28 @@ command and the health check. Set these service variables:
 
 `PORT` is injected by Railway — do not set it there.
 
+**Vercel** — import the repo as a new project (framework preset: **Other**, no
+build command). `vercel.json` rewrites every path to `api/index.js`, which runs
+the same Express app as a serverless function, so URLs do not change. Set the
+same variables as in the table above in Project → Settings → Environment
+Variables, then redeploy.
+
+What differs from Railway:
+
+- **Atlas Network Access** must allow `0.0.0.0/0`. Vercel functions have no
+  fixed egress IPs to allow instead.
+- **Rate limits are counted in MongoDB** (a `ratelimits` collection that cleans
+  itself up through a TTL index), because each function instance has its own
+  memory. This switches on automatically when `VERCEL` is set; force it either
+  way with `RATE_LIMIT_STORE=mongo` or `RATE_LIMIT_STORE=memory`.
+- **The first request after a cold start** waits up to 8 s for MongoDB before
+  answering, so a cold start costs one slower request, not a 503.
+- `uptimeSeconds` on `/health` is the age of the function instance, which is
+  normally short.
+
+`railway.json` is kept, so moving back is only a matter of pointing the Setu
+site at the Railway URL again.
+
 Then set `SHORTENER_API_URL` and `SHORTENER_API_KEY` on the Setu site to point
 at the deployed service.
 
