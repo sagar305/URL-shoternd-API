@@ -11,12 +11,13 @@ import { dbState, isDbReady } from "./db.js";
 import { requireApiKey, checkOrigin } from "./middleware/auth.js";
 import { errorHandler, notFound } from "./middleware/errors.js";
 import { linksRouter } from "./routes/links.js";
+import { rateLimitStore } from "./lib/mongoRateLimitStore.js";
 
 export function createApp() {
   const app = express();
 
-  // Railway terminates TLS upstream, so the client IP the rate limiter keys on
-  // only arrives via X-Forwarded-For.
+  // Railway and Vercel both terminate TLS upstream, so the client IP the rate
+  // limiter keys on only arrives via X-Forwarded-For.
   app.set("trust proxy", 1);
 
   app.disable("x-powered-by");
@@ -54,6 +55,10 @@ export function createApp() {
       limit: 120,
       standardHeaders: "draft-7",
       legacyHeaders: false,
+      store: rateLimitStore("links:"),
+      // A database outage must not turn into a wall of 429s or 500s here: the
+      // readiness check below already answers 503 with the reason.
+      passOnStoreError: true,
     }),
     checkOrigin,
     requireApiKey,
