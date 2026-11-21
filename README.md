@@ -170,3 +170,15 @@ It never parses a payload. An invoice and a menu are both just opaque compressed
 strings here, so a change to a tool's data shape needs no change and no redeploy
 on this side. It also stores no view counts — only `lastAccessedAt`, and only
 because the sliding expiry needs it.
+
+## Deploying on Vercel
+
+Vercel runs `api/index.js` as a serverless function (`vercel.json` rewrites
+every path to it); `src/index.js` with `app.listen()` is only for Railway or
+other long-lived hosts.
+
+1. Set `MONGODB_URI` and `API_KEY` (plus any optional variables) in
+   Project → Settings → Environment Variables, then **redeploy**.
+2. In MongoDB Atlas → Network Access, allow `0.0.0.0/0` — Vercel has no fixed
+   egress IPs.
+3. Open `/health`: it reports any missing variable or database error.
