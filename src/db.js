@@ -88,3 +88,36 @@ export async function connectDb(uri = config.mongoUri) {
 export async function disconnectDb() {
   await mongoose.disconnect();
 }
+
+// Serverless (Vercel): no long-lived process to retry in the background, so
+// each cold start makes one attempt and warm invocations reuse the result.
+// A failed attempt is forgotten so the next request tries again.
+let pending = null;
+
+export function ensureDb(uri = config.mongoUri) {
+  if (isDbReady()) return Promise.resolve();
+  if (!uri) {
+    state.status = "unconfigured";
+    state.error = "MONGODB_URI is not set";
+    return Promise.resolve();
+  }
+  if (!pending) {
+    state.status = "connecting";
+    state.since = new Date().toISOString();
+    pending = attempt(uri)
+      .then(() => {
+        state.status = "connected";
+        state.error = null;
+        state.since = new Date().toISOString();
+      })
+      .catch((error) => {
+        state.status = "error";
+        state.error = error?.message ?? String(error);
+        console.error(`[shortener] mongodb connection failed: ${state.error}`);
+      })
+      .finally(() => {
+        pending = null;
+      });
+  }
+  return pending;
+}
